@@ -1,12 +1,12 @@
 /**
  * Copyright 2015 RECRUIT LIFESTYLE CO., LTD.
- *
+ * <p/>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *            http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p/>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p/>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,18 +16,20 @@
 
 package jp.co.recruit_lifestyle.android.floatingview;
 
+import android.animation.Animator;
+import android.animation.AnimatorSet;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
-import android.support.annotation.NonNull;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -169,7 +171,8 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
     /**
      * 左・右端に寄せるアニメーション
      */
-    private ValueAnimator mMoveEdgeAnimator;
+    private ValueAnimator mMoveEdgeAnimatorX;
+    private ValueAnimator mMoveEdgeAnimatorY;
 
     /**
      * Interpolator
@@ -225,6 +228,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * 移動方向
      */
     private int mMoveDirection;
+
+    public Rect getPositionLimitRect() {
+        return mPositionLimitRect;
+    }
 
     /**
      * コンストラクタ
@@ -285,6 +292,10 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         updateViewLayout();
     }
 
+    public int getStatusBarHeight() {
+        return mStatusBarHeight;
+    }
+
     /**
      * 初回描画時の座標設定を行います。
      */
@@ -295,7 +306,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         if (mMoveDirection == FloatingViewManager.MOVE_DIRECTION_NONE) {
             mParams.x = mInitX;
             mParams.y = mInitY;
-            moveTo(mInitX, mInitY, mInitX, mInitY, false);
+            moveTo(mInitX, mInitY, mInitX, mInitY, false, null);
         } else {
             mParams.x = 0;
             mParams.y = mMetrics.heightPixels - mStatusBarHeight - getMeasuredHeight();
@@ -369,8 +380,11 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      */
     @Override
     protected void onDetachedFromWindow() {
-        if (mMoveEdgeAnimator != null) {
-            mMoveEdgeAnimator.removeAllUpdateListeners();
+        if (mMoveEdgeAnimatorX != null) {
+            mMoveEdgeAnimatorX.removeAllUpdateListeners();
+        }
+        if (mMoveEdgeAnimatorY != null) {
+            mMoveEdgeAnimatorY.removeAllUpdateListeners();
         }
         super.onDetachedFromWindow();
     }
@@ -379,7 +393,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * {@inheritDoc}
      */
     @Override
-    public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+    public boolean dispatchTouchEvent(MotionEvent event) {
         // Viewが表示されていなければ何もしない
         if (getVisibility() != View.VISIBLE) {
             return true;
@@ -543,7 +557,14 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
         // TODO:Y座標もアニメーションさせる
         final int goalPositionY = currentY;
         // 指定座標に移動
-        moveTo(currentX, currentY, goalPositionX, goalPositionY, withAnimation);
+        moveTo(currentX, currentY, goalPositionX, goalPositionY, withAnimation, null);
+    }
+
+    public void moveToTop(Animator.AnimatorListener pAnimatorListener) {
+        final int goalPositionX = mPositionLimitRect.right;
+        final int goalPositionY = mMetrics.heightPixels - mStatusBarHeight - getMeasuredHeight();
+        moveTo(mParams.x, mParams.y, goalPositionX, goalPositionY, true, pAnimatorListener);
+
     }
 
     /**
@@ -556,7 +577,7 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * @param goalPositionY 移動先のY座標
      * @param withAnimation アニメーションを行う場合はtrue.行わない場合はfalse
      */
-    private void moveTo(int currentX, int currentY, int goalPositionX, int goalPositionY, boolean withAnimation) {
+    private void moveTo(int currentX, int currentY, int goalPositionX, int goalPositionY, boolean withAnimation, final Animator.AnimatorListener pAnimationListener) {
         // 画面端からはみ出さないように調整
         goalPositionX = Math.min(Math.max(mPositionLimitRect.left, goalPositionX), mPositionLimitRect.right);
         goalPositionY = Math.min(Math.max(mPositionLimitRect.top, goalPositionY), mPositionLimitRect.bottom);
@@ -565,18 +586,56 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
             // TODO:Y座標もアニメーションさせる
             mParams.y = goalPositionY;
 
-            mMoveEdgeAnimator = ValueAnimator.ofInt(currentX, goalPositionX);
-            mMoveEdgeAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            mMoveEdgeAnimatorX = ValueAnimator.ofInt(currentX, goalPositionX);
+            mMoveEdgeAnimatorX.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                 @Override
                 public void onAnimationUpdate(ValueAnimator animation) {
                     mParams.x = (Integer) animation.getAnimatedValue();
                     mWindowManager.updateViewLayout(FloatingView.this, mParams);
                 }
             });
+            mMoveEdgeAnimatorY = ValueAnimator.ofInt(currentY, goalPositionY);
+            mMoveEdgeAnimatorY.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    mParams.y = (Integer) animation.getAnimatedValue();
+                    mWindowManager.updateViewLayout(FloatingView.this, mParams);
+                }
+            });
             // X軸のアニメーション設定
-            mMoveEdgeAnimator.setDuration(MOVE_TO_EDGE_DURATION);
-            mMoveEdgeAnimator.setInterpolator(mMoveEdgeInterpolator);
-            mMoveEdgeAnimator.start();
+            mMoveEdgeAnimatorX.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeAnimatorX.setInterpolator(mMoveEdgeInterpolator);
+            mMoveEdgeAnimatorY.setDuration(MOVE_TO_EDGE_DURATION);
+            mMoveEdgeAnimatorY.setInterpolator(mMoveEdgeInterpolator);
+            AnimatorSet lAnimationSet = new AnimatorSet();
+            lAnimationSet.addListener(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator pAnimator) {
+                    if (pAnimationListener != null)
+                        pAnimationListener.onAnimationStart(pAnimator);
+                }
+
+                @Override
+                public void onAnimationEnd(Animator pAnimator) {
+                    if (pAnimationListener != null)
+                        pAnimationListener.onAnimationEnd(pAnimator);
+                }
+
+                @Override
+                public void onAnimationCancel(Animator pAnimator) {
+                    if (pAnimationListener != null)
+                        pAnimationListener.onAnimationCancel(pAnimator);
+                }
+
+                @Override
+                public void onAnimationRepeat(Animator pAnimator) {
+                    if (pAnimationListener != null)
+                        pAnimationListener.onAnimationRepeat(pAnimator);
+                }
+            });
+            lAnimationSet.playTogether(mMoveEdgeAnimatorX, mMoveEdgeAnimatorY);
+            lAnimationSet.start();
+//            mMoveEdgeAnimator.start();
         } else {
             // 位置が変化した時のみ更新
             if (mParams.x != goalPositionX || mParams.y != goalPositionY) {
@@ -597,9 +656,13 @@ class FloatingView extends FrameLayout implements ViewTreeObserver.OnPreDrawList
      * アニメーションをキャンセルします。
      */
     private void cancelAnimation() {
-        if (mMoveEdgeAnimator != null && mMoveEdgeAnimator.isStarted()) {
-            mMoveEdgeAnimator.cancel();
-            mMoveEdgeAnimator = null;
+        if (mMoveEdgeAnimatorX != null && mMoveEdgeAnimatorX.isStarted()) {
+            mMoveEdgeAnimatorX.cancel();
+            mMoveEdgeAnimatorX = null;
+        }
+        if (mMoveEdgeAnimatorY != null && mMoveEdgeAnimatorY.isStarted()) {
+            mMoveEdgeAnimatorY.cancel();
+            mMoveEdgeAnimatorY = null;
         }
     }
 

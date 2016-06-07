@@ -16,14 +16,24 @@
 
 package jp.co.recruit_lifestyle.android.floatingview;
 
+import android.animation.Animator;
+import android.app.ActionBar;
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Vibrator;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 
 import java.util.ArrayList;
 
@@ -142,6 +152,8 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
      * TODO:第2弾のFloatingViewの複数表示で意味を発揮する予定
      */
     private final ArrayList<FloatingView> mFloatingViewList;
+    private FrameLayout mTopFloatingView;
+    private FrameLayout mTopFloatingBG;
 
     /**
      * コンストラクタ
@@ -264,9 +276,13 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         if (action == MotionEvent.ACTION_DOWN) {
             // 処理なし
             mIsMoveAccept = true;
+
         }
         // 移動
         else if (action == MotionEvent.ACTION_MOVE) {
+            if (isTopViewVisible()) {
+                closeFullTopView();
+            }
             // 今回の状態
             final boolean isIntersecting = isIntersectWithTrash();
             // これまでの状態
@@ -309,6 +325,15 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         }
 
         return false;
+    }
+
+    private void closeFullTopView() {
+        if (mTopFloatingView != null) {
+            mWindowManager.removeViewImmediate(mTopFloatingView);
+            mWindowManager.removeViewImmediate(mTopFloatingBG);
+            mTopFloatingView = null;
+            mTopFloatingBG = null;
+        }
     }
 
     /**
@@ -403,6 +428,9 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         addViewToWindow(view, options);
     }
 
+    public void clearView(){
+
+    }
     /**
      * ViewをWindowに貼り付けます。
      *
@@ -483,6 +511,102 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
             mWindowManager.removeViewImmediate(floatingView);
         }
         mFloatingViewList.clear();
+    }
+
+    public void openFullView(final View pContent) {
+        if (mTargetFloatingView!=null){
+            mTargetFloatingView.moveToTop(new Animator.AnimatorListener() {
+                @Override
+                public void onAnimationStart(Animator pAnimator) {
+
+                }
+
+                @Override
+                public void onAnimationEnd(Animator pAnimator) {
+                    displayTopWindow(pContent);
+                }
+
+                @Override
+                public void onAnimationCancel(Animator pAnimator) {
+
+                }
+
+                @Override
+                public void onAnimationRepeat(Animator pAnimator) {
+
+                }
+            });
+        }
+    }
+    public boolean isTopViewVisible(){
+        return mTopFloatingView!=null;
+    }
+    private void displayTopWindow(View pContent) {
+//topfloatingbg
+        DisplayMetrics lDisplayMetrics = new DisplayMetrics();
+        ((WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getMetrics(lDisplayMetrics);
+        mTopFloatingBG = new FrameLayout(mContext);
+        mTopFloatingBG.setBackgroundColor(Color.parseColor("#8a000000"));
+        WindowManager.LayoutParams lLayoutParamsBG = getTopViewLayoutParams();
+        lLayoutParamsBG.x =0;
+        lLayoutParamsBG.y = 0;
+        lLayoutParamsBG.width = lDisplayMetrics.widthPixels;
+        lLayoutParamsBG.height = lDisplayMetrics.heightPixels;
+        lLayoutParamsBG.gravity = Gravity.LEFT|Gravity.TOP;
+        mWindowManager.addView(mTopFloatingBG, lLayoutParamsBG);
+
+        // FloatingView
+        mTopFloatingView = new FullTopView(mContext);
+
+        if (pContent!=null) {
+            mTopFloatingView.addView(pContent);
+        }
+        mTopFloatingView.setFocusableInTouchMode(true);
+        mTopFloatingView.setPadding(20,20,20,20);
+        mTopFloatingView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View pView, int i, KeyEvent pKeyEvent) {
+                Log.d("asdf", "asdf");
+                switch (pKeyEvent.getAction()){
+                    case KeyEvent.ACTION_DOWN:
+                        if (pKeyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK){
+                            closeFullTopView();
+                            return true;
+                        }
+                }
+                return false;
+            }
+        });
+        // Viewの貼り付け
+
+        WindowManager.LayoutParams lLayoutParams = getTopViewLayoutParams();
+        lLayoutParams.x =0;
+        lLayoutParams.y = mTargetFloatingView.getPositionLimitRect().top+mTargetFloatingView.getMeasuredHeight();
+        lLayoutParams.width = lDisplayMetrics.widthPixels;
+        lLayoutParams.height = lDisplayMetrics.heightPixels-mTargetFloatingView.getMeasuredHeight()-mTargetFloatingView.getStatusBarHeight();
+        lLayoutParams.gravity = Gravity.LEFT|Gravity.TOP;
+        mWindowManager.addView(mTopFloatingView, lLayoutParams);
+
+
+
+        // 最初の貼り付け時の場合のみ、フルスクリーン監視Viewと削除Viewを貼り付け
+    }
+
+    protected View getTopChildView() {
+        return null;
+    }
+
+    private WindowManager.LayoutParams getTopViewLayoutParams() {
+        WindowManager.LayoutParams mParams = new WindowManager.LayoutParams();
+        mParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        mParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        mParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+        mParams.flags =
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+        mParams.format = PixelFormat.RGBA_8888;
+        return mParams;
     }
 
     /**
