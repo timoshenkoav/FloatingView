@@ -236,6 +236,9 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         }
     }
 
+    public boolean hasFloatingViews(){
+        return mFloatingViewList.size()>0;
+    }
     /**
      * FloatingViewのタッチロックの解除を行います。
      */
@@ -293,7 +296,11 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
             }
             // 重なり始めの場合
             if (isIntersecting && !isIntersect) {
-                mVibrator.vibrate(VIBRATE_INTERSECTS_MILLIS);
+                try {
+                    mVibrator.vibrate(VIBRATE_INTERSECTS_MILLIS);
+                }catch (Throwable e){
+                    e.printStackTrace();
+                }
                 mTrashView.setScaleTrashIcon(true);
             }
             // 重なり終わりの場合
@@ -327,7 +334,7 @@ public class FloatingViewManager implements ScreenChangedListener, View.OnTouchL
         return false;
     }
 
-    private void closeFullTopView() {
+    public void closeFullTopView() {
         if (mTopFloatingView != null) {
             mWindowManager.removeViewImmediate(mTopFloatingView);
             mWindowManager.removeViewImmediate(mTopFloatingBG);
